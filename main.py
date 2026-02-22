@@ -28,7 +28,6 @@ async def start_web_server():
     app.router.add_get("/", handle)
     runner = web.AppRunner(app)
     await runner.setup()
-    # Render передає порт у змінну оточення PORT
     port = int(os.getenv("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
@@ -49,17 +48,20 @@ def get_music_keyboard(query_id, page=0):
 
     builder = InlineKeyboardBuilder()
     for res in current_items:
-        button_text = f"{res['title'][:40]} ({res['duration']})"
+        # Обмежуємо текст назви, щоб кнопка була акуратною
+        button_text = f"{res['title'][:35]} ({res['duration']})"
+        # Використовуємо короткий префікс 'd:', щоб не перевищити ліміт 64 байти
         builder.row(types.InlineKeyboardButton(
             text=button_text, 
-            callback_data=f"dl_{res['id']}")
+            callback_data=f"d:{res['id']}")
         )
     
     nav_buttons = []
+    # Короткі callback_data для навігації 'p:query_id:page'
     if page > 0:
-        nav_buttons.append(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"page_{query_id}_{page-1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"p:{query_id}:{page-1}"))
     if end_index < len(results):
-        nav_buttons.append(types.InlineKeyboardButton(text="Вперед ➡️", callback_data=f"page_{query_id}_{page+1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="Вперед ➡️", callback_data=f"p:{query_id}:{page+1}"))
     
     if nav_buttons:
         builder.row(*nav_buttons)
@@ -87,7 +89,8 @@ async def handle_search(message: types.Message):
         await status_msg.edit_text("Нічого не знайдено. 😔")
         return
 
-    query_id = str(abs(hash(query)))
+    # Робимо query_id максимально коротким для економії місця в callback_data
+    query_id = str(abs(hash(query)) % 1000000)
     search_cache[query_id] = results
     
     await status_msg.edit_text(
@@ -95,16 +98,20 @@ async def handle_search(message: types.Message):
         reply_markup=get_music_keyboard(query_id, 0)
     )
 
-@dp.callback_query(F.data.startswith("page_"))
+@dp.callback_query(F.data.startswith("p:"))
 async def process_page(callback: types.CallbackQuery):
-    _, query_id, page = callback.data.split("_")
+    # Розбираємо коротку команду p:query_id:page
+    _, query_id, page = callback.data.split(":")
     await callback.message.edit_reply_markup(reply_markup=get_music_keyboard(query_id, int(page)))
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("dl_"))
+@dp.callback_query(F.data.startswith("d:"))
 async def process_download(callback: types.CallbackQuery):
-    video_id = callback.data.split("_")[1]
+    # Отримуємо чистий video_id після d:
+    video_id = callback.data.split(":")[1]
+    
     song_title = "пісню"
+    # Шукаємо назву в кеші
     for q_id in search_cache:
         for item in search_cache[q_id]:
             if item['id'] == video_id:
@@ -120,15 +127,13 @@ async def process_download(callback: types.CallbackQuery):
         await wait_msg.delete()
         await callback.answer("Готово! ✅")
     except Exception as e:
+        # Виводимо помилку в чат для діагностики
         await wait_msg.edit_text(f"Помилка завантаження: {e}")
 
 # --- Запуск ---
 async def main():
-    # Запускаємо веб-сервер для Render у фоні
     asyncio.create_task(start_web_server())
-    
     print("Бот запущений!")
-    # Запускаємо самого бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

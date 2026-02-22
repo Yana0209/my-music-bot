@@ -8,14 +8,17 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Копіюємо файли
+# Копіюємо всі файли (включаючи cookies.txt, якщо він уже є в папці)
 COPY . .
 
-# Оновлюємо pip та встановлюємо бібліотеки з форсованою версією yt-dlp
+# Оновлюємо pip та встановлюємо бібліотеки
+# Додаємо --upgrade для yt-dlp, щоб він завжди був найсвіжішої версії
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir aiogram yt-dlp
+RUN pip install --no-cache-dir aiogram yt-dlp --upgrade
 
-# Вказуємо шлях до FFmpeg явно (це вирішить помилку "does not exist")
+# Вказуємо шлях до FFmpeg явно
+# У коді ми шукаємо саме FFMPEG_LOCATION, тому додаємо цей рядок
+ENV FFMPEG_LOCATION=/usr/bin/ffmpeg
 ENV FFMPEG_BINARY=/usr/bin/ffmpeg
 
 # Запуск бота

@@ -52,7 +52,7 @@ def download_audio(video_id):
     ffmpeg_path = os.getenv('FFMPEG_LOCATION', '/usr/bin/ffmpeg')
 
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'm4a/bestaudio/best',
         'outtmpl': f'downloads/{video_id}.%(ext)s',
         'ffmpeg_location': ffmpeg_path, 
         # Використовуємо куки за правильним шляхом
@@ -73,3 +73,4 @@ def download_audio(video_id):
         ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
     
     return file_path
+

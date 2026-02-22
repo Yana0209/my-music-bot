@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from utils.downloader import search_music, download_audio
 
-# Налаштування логування, щоб бачити помилки в панелі Render
+# Налаштування логування
 logging.basicConfig(level=logging.INFO)
 
 # Твій токен
@@ -18,6 +18,8 @@ dp = Dispatcher()
 
 # Словник для зберігання результатів пошуку
 search_cache = {}
+# Глобальний лічильник для надкоротких ID пошуку
+search_counter = 0
 
 # --- Секція для Render (Web Server) ---
 async def handle(request):
@@ -48,20 +50,20 @@ def get_music_keyboard(query_id, page=0):
 
     builder = InlineKeyboardBuilder()
     for res in current_items:
-        # Обмежуємо текст назви, щоб кнопка була акуратною
+        # Обмежуємо текст назви
         button_text = f"{res['title'][:35]} ({res['duration']})"
-        # Використовуємо короткий префікс 'd:', щоб не перевищити ліміт 64 байти
+        # d:VIDEO_ID - найкоротший формат
         builder.row(types.InlineKeyboardButton(
             text=button_text, 
             callback_data=f"d:{res['id']}")
         )
     
     nav_buttons = []
-    # Короткі callback_data для навігації 'p:query_id:page'
+    # p:Q_ID:PAGE
     if page > 0:
-        nav_buttons.append(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"p:{query_id}:{page-1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="⬅️", callback_data=f"p:{query_id}:{page-1}"))
     if end_index < len(results):
-        nav_buttons.append(types.InlineKeyboardButton(text="Вперед ➡️", callback_data=f"p:{query_id}:{page+1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="➡️", callback_data=f"p:{query_id}:{page+1}"))
     
     if nav_buttons:
         builder.row(*nav_buttons)
@@ -71,16 +73,17 @@ def get_music_keyboard(query_id, page=0):
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     await message.answer(
-        "Привіт! Я твій музичний бот. Напиши назву пісні, автора або ключові слова і я допоможу тобі з пошуком! 🎵",
+        "Привіт! Я твій музичний бот. Напиши назву пісні і я допоможу з пошуком! 🎵",
         reply_markup=get_main_menu()
     )
 
 @dp.message(F.text == "🔍 Знайти музику")
 async def btn_search_handler(message: types.Message):
-    await message.answer("Введіть назву пісні або виконавця, якого хочете знайти: ⌨️")
+    await message.answer("Введіть назву пісні або виконавця: ⌨️")
 
 @dp.message(F.text)
 async def handle_search(message: types.Message):
+    global search_counter
     query = message.text
     status_msg = await message.answer(f"Шукаю «{query}»... 🔍")
     
@@ -89,8 +92,9 @@ async def handle_search(message: types.Message):
         await status_msg.edit_text("Нічого не знайдено. 😔")
         return
 
-    # Робимо query_id максимально коротким для економії місця в callback_data
-    query_id = str(abs(hash(query)) % 1000000)
+    # Створюємо максимально короткий числовий ID (1, 2, 3...)
+    search_counter += 1
+    query_id = str(search_counter)
     search_cache[query_id] = results
     
     await status_msg.edit_text(
@@ -100,25 +104,25 @@ async def handle_search(message: types.Message):
 
 @dp.callback_query(F.data.startswith("p:"))
 async def process_page(callback: types.CallbackQuery):
-    # Розбираємо коротку команду p:query_id:page
-    _, query_id, page = callback.data.split(":")
-    await callback.message.edit_reply_markup(reply_markup=get_music_keyboard(query_id, int(page)))
+    # Розбираємо p:query_id:page
+    data = callback.data.split(":")
+    query_id = data[1]
+    page = int(data[2])
+    await callback.message.edit_reply_markup(reply_markup=get_music_keyboard(query_id, page))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("d:"))
 async def process_download(callback: types.CallbackQuery):
-    # Отримуємо чистий video_id після d:
     video_id = callback.data.split(":")[1]
     
     song_title = "пісню"
-    # Шукаємо назву в кеші
     for q_id in search_cache:
         for item in search_cache[q_id]:
             if item['id'] == video_id:
                 song_title = item['title']
                 break
 
-    wait_msg = await callback.message.answer(f"Завантажую «{song_title[:30]}...» ⏳\nЦе займе кілька секунд...")
+    wait_msg = await callback.message.answer(f"Завантажую «{song_title[:30]}...» ⏳")
     
     try:
         file_path = download_audio(video_id)
@@ -127,7 +131,6 @@ async def process_download(callback: types.CallbackQuery):
         await wait_msg.delete()
         await callback.answer("Готово! ✅")
     except Exception as e:
-        # Виводимо помилку в чат для діагностики
         await wait_msg.edit_text(f"Помилка завантаження: {e}")
 
 # --- Запуск ---

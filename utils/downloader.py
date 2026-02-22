@@ -43,14 +43,14 @@ def download_audio(video_id):
     ffmpeg_path = os.getenv('FFMPEG_LOCATION', '/usr/bin/ffmpeg')
 
     ydl_opts = {
-        # Змінюємо формат на більш універсальний для мобільних клієнтів
         'format': 'bestaudio/best',
         'outtmpl': f'downloads/{video_id}.%(ext)s',
         'ffmpeg_location': ffmpeg_path, 
         'cookiefile': COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
-        # ОСНОВНА ПРАВКА: змушуємо вдавати клієнта Android/iOS
+        
+        # Використовуємо інший метод обходу (iOS)
         'youtube_include_dash_manifest': False,
-        'client_name': 'android', 
+        'client_name': 'ios',
         'client_version': '19.29.1',
         
         'postprocessors': [{
@@ -61,8 +61,7 @@ def download_audio(video_id):
         'quiet': False,
         'nocheckcertificate': True,
         'geo_bypass': True,
-        # Оновлений User-Agent
-        'user_agent': 'Mozilla/5.0 (Android 14; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0'
+        'user_agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X; en_US)'
     }
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

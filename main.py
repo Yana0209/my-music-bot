@@ -5,7 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from utils.downloader import search_music, download_audio
 
 # Твій токен
-API_TOKEN = '8242096623:AAGwnapLBvjzcBJu2PGje6ZBdt1AC9-N6H8'
+API_TOKEN = os.getenv("BOT_TOKEN")
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
@@ -116,4 +116,5 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+
     asyncio.run(main())

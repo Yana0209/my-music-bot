@@ -1,9 +1,14 @@
 import os
 import asyncio
+import logging
+from aiohttp import web  # Додано для Render
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from utils.downloader import search_music, download_audio
+
+# Налаштування логування, щоб бачити помилки в панелі Render
+logging.basicConfig(level=logging.INFO)
 
 # Твій токен
 API_TOKEN = os.getenv("BOT_TOKEN")
@@ -14,13 +19,27 @@ dp = Dispatcher()
 # Словник для зберігання результатів пошуку
 search_cache = {}
 
-# Функція для постійної кнопки знизу
+# --- Секція для Render (Web Server) ---
+async def handle(request):
+    return web.Response(text="Bot is running")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    # Render передає порт у змінну оточення PORT
+    port = int(os.getenv("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"Web server started on port {port}")
+
+# --- Функції клавіатури ---
 def get_main_menu():
     builder = ReplyKeyboardBuilder()
     builder.row(types.KeyboardButton(text="🔍 Знайти музику"))
     return builder.as_markup(resize_keyboard=True)
 
-# Функція для клавіатури зі сторінками
 def get_music_keyboard(query_id, page=0):
     results = search_cache.get(query_id, [])
     items_per_page = 5
@@ -46,10 +65,11 @@ def get_music_keyboard(query_id, page=0):
         builder.row(*nav_buttons)
     return builder.as_markup()
 
+# --- Хендлери ---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     await message.answer(
-        "Привіт! Я твій музичний бот. 🎵\nПривіт! Я твій музичний бот. Напиши назву пісні, автора або ключові слова і я допоможу тобі з пошуком! 🎵.",
+        "Привіт! Я твій музичний бот. Напиши назву пісні, автора або ключові слова і я допоможу тобі з пошуком! 🎵",
         reply_markup=get_main_menu()
     )
 
@@ -59,7 +79,6 @@ async def btn_search_handler(message: types.Message):
 
 @dp.message(F.text)
 async def handle_search(message: types.Message):
-    # Якщо користувач написав щось інше (назву пісні)
     query = message.text
     status_msg = await message.answer(f"Шукаю «{query}»... 🔍")
     
@@ -85,8 +104,6 @@ async def process_page(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("dl_"))
 async def process_download(callback: types.CallbackQuery):
     video_id = callback.data.split("_")[1]
-    
-    # Знаходимо назву пісні в кеші за ID
     song_title = "пісню"
     for q_id in search_cache:
         for item in search_cache[q_id]:
@@ -94,29 +111,28 @@ async def process_download(callback: types.CallbackQuery):
                 song_title = item['title']
                 break
 
-    # 1. Надсилаємо повідомлення про початок завантаження
     wait_msg = await callback.message.answer(f"Завантажую «{song_title[:30]}...» ⏳\nЦе займе кілька секунд...")
     
     try:
-        # 2. Завантаження
         file_path = download_audio(video_id)
         audio = types.FSInputFile(file_path)
-        
-        # 3. Надсилаємо музику
         await callback.message.answer_audio(audio)
-        
-        # 4. Видаляємо повідомлення "Зачекайте", коли все готово
         await wait_msg.delete()
         await callback.answer("Готово! ✅")
-        
     except Exception as e:
         await wait_msg.edit_text(f"Помилка завантаження: {e}")
 
+# --- Запуск ---
 async def main():
+    # Запускаємо веб-сервер для Render у фоні
+    asyncio.create_task(start_web_server())
+    
     print("Бот запущений!")
+    # Запускаємо самого бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-
-    asyncio.run(main())
-
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        print("Бот зупинений")

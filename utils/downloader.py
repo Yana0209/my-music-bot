@@ -19,39 +19,44 @@ def search_music(query):
         'noplaylist': True,
         'quiet': True,
         'extract_flat': True,
+        # Додаємо використання куків для пошуку, щоб YouTube не блокував запити
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        # Шукаємо 20 варіантів, щоб вистачило на сторінки
+        # Шукаємо 20 варіантів
         info = ydl.extract_info(f"ytsearch20:{query}", download=False)
         
         results = []
-        for e in info['entries']:
-            results.append({
-                "id": e['id'], 
-                "title": e['title'],
-                # Отримуємо тривалість і форматуємо її
-                "duration": format_duration(e.get('duration'))
-            })
+        if 'entries' in info:
+            for e in info['entries']:
+                results.append({
+                    "id": e['id'], 
+                    "title": e['title'],
+                    "duration": format_duration(e.get('duration'))
+                })
         return results
 
 def download_audio(video_id):
     file_path = f"downloads/{video_id}.mp3"
     
-    # Якщо файл вже завантажувався раніше, не качаємо знову
     if os.path.exists(file_path):
         return file_path
+
+    # Отримуємо шлях до FFmpeg з налаштувань системи (для Render)
+    ffmpeg_path = os.getenv('FFMPEG_LOCATION', 'ffmpeg')
 
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': f'downloads/{video_id}.%(ext)s',
-        # Шлях до твого ffmpeg
-        'ffmpeg_location': 'ffmpeg', 
+        'ffmpeg_location': ffmpeg_path, 
+        # Додаємо cookies.txt для завантаження
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
-        'quiet': True,
+        'quiet': False, # Ставимо False, щоб бачити помилки в логах Render, якщо вони будуть
     }
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

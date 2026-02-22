@@ -9,7 +9,7 @@ WORKDIR /app
 COPY . .
 
 # Встановлюємо бібліотеки
-RUN pip install --no-cache-dir aiogram yt-dlp
+RUN pip install --no-cache-dir aiogram yt-dlp --upgrade
 
 # Запуск бота
 CMD ["python", "main.py"]
